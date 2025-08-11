@@ -212,3 +212,44 @@ class CNN_classifer(nn.Module):
         output = self.fc(cnn_out)
 
         return output
+    
+
+class SpoofEnsemble_attention(nn.Module):
+    def __init__(self, lstm_ffn_branch, cnn_branch, output_dim, dropout):
+
+        super().__init__()
+
+        self.lstm_ffn_branch = lstm_ffn_branch
+        self.cnn_branch = cnn_branch
+
+        lstm_ffn_dim = lstm_ffn_branch.lstm_ffn_dim
+        cnn_dim = cnn_branch.cnn_dim
+
+        # Instantiate the attention module
+        self.attention = BranchAttention(lstm_ffn_dim, cnn_dim)
+        
+        # This attribute will store the weights from the last forward pass
+        # for later analysis and interpretation.
+        self.attention_weights = None
+
+        self.fc = nn.Linear(lstm_ffn_dim + cnn_dim, output_dim)
+
+        self.dropout = nn.Dropout(dropout)
+        
+    def forward(self, pitch_hnrs, pitchhnr_lengths, global_features, mfccs):
+      
+        lstm_ffn_out = self.lstm_ffn_branch(pitch_hnrs, pitchhnr_lengths, global_features)
+        
+        # Get the output from the second branch
+        cnn_out = self.cnn_branch(mfccs)
+        
+        # Pass the raw outputs through the attention mechanism
+        combined_features, self.attention_weights = self.attention(lstm_ffn_out, cnn_out)
+        
+        # Apply dropout
+        combined_features = self.dropout(combined_features)
+        
+        # Final classification
+        output = self.fc(combined_features)
+        
+        return output
